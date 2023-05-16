@@ -12,21 +12,24 @@ for(N in SampleSize)
   
   Ltest = Ltest[Ltest<=max.L]
   
+  yMat = readRDS( paste("sample_",mc.name,"_N",N, ".RDS",sep=""))
+  
   set.seed(123)
   for(j in 1:Nreps)
   {
     print(j)
-    yData = quantile.function(runif(N),true.par)
+    yData = yMat[,j]
     
     mle = optim(true.par, log.lkl, method = "BFGS", control =  list("fnscale"=-1, "maxit"=500), y = yData)
     
     mat_select_caglad = tryCatch({lmoment.select(yData, true.par, max(Ltest), orthogonal = F, uvalues = tau.seq, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,  
                                lmoment.est = "caglad", grid.length = 2000, Nsim = 1000,
-                               control = list( "maxit"=500),mc.cores= 4 )},
+                               control = list( "maxit"=500),mc.cores= detectCores() )},
                                error = function(e){
+                                 print(error)
                                  lmoment.select(yData, mle$par, max(Ltest), orthogonal = F, uvalues = tau.seq, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,  
                                                 lmoment.est = "caglad", grid.length = 2000, Nsim = 1000,
-                                                control = list( "maxit"=500),mc.cores= 4 )
+                                                control = list( "maxit"=500),mc.cores= detectCores() )
                                  
                                })
     
@@ -55,21 +58,21 @@ for(N in SampleSize)
     #                        mc.cores = 1)
    
     
-    lasso.select = tryCatch({tryCatch({lmoment.lasso(yData, true.par, 2*max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,  
+    lasso.select = tryCatch({tryCatch({lmoment.lasso(yData, true.par, 2*max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,
                               lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, control = list("maxit" = 500))},
                             error = function(e){
-                              lmoment.lasso(yData, mle$par, 2*max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,  
+                              lmoment.lasso(yData, mle$par, 2*max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,
                                             lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, control = list("maxit" = 500))
                             })},
                             error=function(e){
-                              tryCatch({lmoment.lasso(yData, true.par, max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,  
+                              tryCatch({lmoment.lasso(yData, true.par, max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,
                                                       lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, control = list("maxit" = 500))},
                                        error = function(e){
-                                         lmoment.lasso(yData, mle$par, max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,  
+                                         lmoment.lasso(yData, mle$par, max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,
                                                        lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, control = list("maxit" = 500))
                                        })
                             })
-      
+
     results_list[[j]] = list("mle"=mle,"caglad_ss" = caglad_ss, "select_caglad" = mat_select_caglad,
                              "lasso_select" = lasso.select)
 

@@ -3,9 +3,9 @@ rm(list=ls())
 setwd("~/Dropbox/Lmoments_redux/Codes")
 
 mc.name = "gpd"
-paper_path = "~/Dropbox/Aplicativos/Overleaf/l_moments_redux"
+paper_path = "~/Dropbox/Lmoments_redux/Draft/v2/"
 
-julia_path = "/home/luisalvarez/julia-1.7.3/bin"
+julia_path = "/home/luisalvarez/julia-1.9.0/bin"
 
 quantile.function <- function(u, par){
   loc = 0
@@ -43,11 +43,13 @@ lmoment.analytic <- function(par,L)
 
 true.par = c(1,-0.2)
 
-Nreps = 500
+Nreps = 2000
 SampleSize = c(50,100,500)
 
 max.L=100
 tau.seq = c(0.5,0.9,0.99,0.999)
+
+source("make_data.R")
 
 source("simulation.R")
 source("gen_results.R")

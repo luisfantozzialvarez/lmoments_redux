@@ -1,4 +1,5 @@
 library(xtable)
+source("estimation.R")
 
 table = c()
 
@@ -7,13 +8,38 @@ for(ss in SampleSize)
 
 modelo = readRDS(paste(mc.name, "_N",ss, ".RDS",sep=""))
 
-LC =which(rowMeans(do.call(rbind,lapply(modelo, function(x){sapply(x$caglad_ss, function(y){length(y)!=2})})))>0)
-LU =which(rowMeans(do.call(rbind,lapply(modelo, function(x){sapply(x$unbiased_ss, function(y){length(y)!=2})})))>0)
 
-keeper = !(1:length(modelo)%in%c(LC, LU))
+#In this step, we rerun estimators which failed (generated errors) due to convergence issues
 
-print(sum(!keeper))
-modelo = modelo[keeper]
+#Loads data
+yMat = readRDS( paste("sample_",mc.name,"_N",ss, ".RDS",sep=""))
+
+
+#Checks for caglad
+val = which(do.call(rbind,lapply(modelo, function(x){sapply(x$caglad_ss, function(y){length(y)!=2})})),arr.ind=T)
+if(nrow(val)>0)
+  for(j in 1:nrow(val))
+    modelo[[val[j,1]]]$caglad_ss[[val[j,2]]] = lmoment.est(yMat[,val[j,1]], modelo[[val[j,1]]]$caglad_fs[[1]]$fs$par,val[j,2] + length(true.par)-1 , lmoment.analytic = lmoment.analytic, quantile.func = quantile.function,
+                                                           density = density.function, grid.length = 2000, par.first.step = modelo[[val[j,1]]]$caglad_fs[[1]]$fs$par, control = list( "maxit"=500))
+
+#Checks for unbiased
+val = which(do.call(rbind,lapply(modelo, function(x){sapply(x$unbiased_ss, function(y){length(y)!=2})})),arr.ind=T)
+if(nrow(val)>0)
+  for(j in 1:nrow(val))
+    modelo[[val[j,1]]]$unbiased_ss[[val[j,2]]] = lmoment.est(yMat[,val[j,1]], modelo[[val[j,1]]]$unbiased_fs[[1]]$fs$par,val[j,2] + length(true.par)-1 , lmoment.analytic = lmoment.analytic, quantile.func = quantile.function,
+                                                             lmoment.est = "unbiased", density = density.function, grid.length = 2000, par.first.step = modelo[[val[j,1]]]$unbiased_fs[[1]]$fs$par, control = list( "maxit"=500))
+
+
+#For the GEV MC, recalculate FS estimator that diverged
+if((mc.name == "gev")&(ss==100))
+{
+  print(modelo[[907]]$caglad_fs[[2]])
+  
+  modelo[[907]]$caglad_fs[[2]] = lmoment.est(yMat[,907], modelo[[907]]$caglad_fs[[1]]$fs$par, 2+length(true.par)-1, lmoment.analytic = lmoment.analytic, quantile.func = quantile.function,
+                                           density = density.function, grid.length = 2000, weight.matrix = "first", control = list( "maxit"=500))
+
+}
+
 for(tau in tau.seq)
 {
   ff = quantile.function(tau, true.par)
@@ -65,7 +91,7 @@ for(tau in tau.seq)
   file.copy(paste((paste("results/",mc.name,"/",mc.name, "_N",ss,"_tau", tau, ".pdf",sep=""))),
             paste(paper_path,"/plots/",mc.name,"/",mc.name, "_N",ss,"_tau", tau, ".pdf",sep=""), overwrite = T )
   
-  line = format(c(min(lmoments.fs.cag),min(lmoments.ss.cag), min(lmoments.fs.un), min(lmoments.ss.un)),scientific=F, digits=3)
+  line = format(round(c(min(lmoments.fs.cag),min(lmoments.ss.cag), min(lmoments.fs.un), min(lmoments.ss.un)),digits=3),scientific=F)
   line.which = c(which.min(lmoments.fs.cag),which.min(lmoments.ss.cag), which.min(lmoments.fs.un), which.min(lmoments.ss.un)) + length(true.par) - 1
   
   line.which = paste(" (",line.which, ")",sep="")

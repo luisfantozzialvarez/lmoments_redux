@@ -118,10 +118,10 @@ lmoment.select <- function(y, par, Lmax, orthogonal = F, uvalues = NULL, lmoment
     return(jjj)
   })
   
-  Lgrid = seq(Lmin+1, Lmax, 1)
+  Lgrid = seq(Lmin, Lmax, 1)
   
   cluster = makeCluster(mc.cores)
-  Valores_Theta = parLapply(cl = cluster,  X = Lgrid, fun = function(L, weight, l.est.mat, l.theta.fs, h1, h2, par)
+  Valores_Theta = parLapply(cl = cluster,  X = Lgrid, fun = function(L, weight, l.est.mat, l.theta.fs, h1, h2, par, mat_fs_deriv, fs.rep)
   {
     library(pracma)
     #print(L)
@@ -151,18 +151,22 @@ lmoment.select <- function(y, par, Lmax, orthogonal = F, uvalues = NULL, lmoment
     })
     
     Theta2 = sapply(1:Nsim, function(j){
-      M.diff = Reduce("+", lapply(1:length(par), function(k) - mat_fs_deriv[[k]][1:L, 1:L]*fs.rep[k,j]))
       
-      pp = c(rep(0, length(par)), M.diff%*%Theta1[(length(par)+1):nrow(Theta1),j])
+      if(L> length(par))
+      {
+        M.diff = Reduce("+", lapply(1:length(par), function(k) - mat_fs_deriv[[k]][1:L, 1:L]*fs.rep[k,j]))
       
-      
-      part2 = -Mo.inv%*%pp - (Mo.inv/2)%*%Reduce("+",lapply(1:(L+length(par)), function(s) Theta1[s, j]*DeltaM[[s]]%*%Theta1[,j]))
+        pp = c(rep(0, length(par)), M.diff%*%Theta1[(length(par)+1):nrow(Theta1),j])
+        
+        part2 =  -Mo.inv%*%pp  - (Mo.inv/2)%*%Reduce("+",lapply(1:(L+length(par)), function(s) Theta1[s, j]*DeltaM[[s]]%*%Theta1[,j]))
+        
+      } else  part2 =  - (Mo.inv/2)%*%Reduce("+",lapply(1:(L+length(par)), function(s) Theta1[s, j]*DeltaM[[s]]%*%Theta1[,j]))
     })
     
     Thetaf = Theta1+Theta2
     
     return(Thetaf[1:length(par),])
-  }, weight = weight, l.est.mat = l.est.mat, l.theta.fs = l.theta.fs, h1=h1, h2 = h2, par = par)
+  }, weight = weight, l.est.mat = l.est.mat, l.theta.fs = l.theta.fs, h1=h1, h2 = h2, par = par, mat_fs_deriv = mat_fs_deriv, fs.rep = fs.rep)
   
   
   stopCluster(cluster)

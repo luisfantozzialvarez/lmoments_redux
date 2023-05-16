@@ -11,11 +11,13 @@ for(N in SampleSize)
   
   Ltest = Ltest[Ltest<=max.L]
   
+  yMat = readRDS( paste("sample_",mc.name,"_N",N, ".RDS",sep=""))
+  
   set.seed(123)
   for(j in 1:Nreps)
   {
     print(j)
-    yData = quantile.function(runif(N),true.par)
+    yData = yMat[,j]
     
     mle = optim(true.par, log.lkl, method = "BFGS", control =  list("fnscale"=-1, "maxit"=500), y = yData)
     
@@ -52,9 +54,12 @@ for(N in SampleSize)
                              "unbiased_fs" = unbiased_fs, "unbiased_ss" = unbiased_ss)
                              #"caglad_semi" = caglad_semi, "unbiased_semi" = unbiased_semi)
     
+
     if(j%%50==0)
       saveRDS(results_list, file = paste(mc.name,"_N",N, ".RDS",sep=""))
+    
   }
   saveRDS(results_list, file = paste(mc.name,"_N",N, ".RDS",sep=""))
+
 }
   

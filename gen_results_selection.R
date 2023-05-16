@@ -4,12 +4,10 @@ table = c()
 
 for(ss in SampleSize)
 {
-  
+
+
   modelo = readRDS(paste("select",mc.name, "_N",ss, ".RDS",sep=""))
-  
 
-
-  
   ff = quantile.function(tau.seq, true.par)
   
   mle = sqrt(rowMeans(sapply(modelo, function(x){(quantile.function(tau.seq,x$mle$par)-ff)^2})))
@@ -31,8 +29,13 @@ for(ss in SampleSize)
   medL = apply(sapply(modelo, function(x) x$select_caglad$Lvals),1,mean)
   lassoL = mean(sapply(modelo, function(x) x$lasso_select$kept) )
   
-  line = format(rbind(caglad.fs,caglad.rmse, caglad.lasso, caglad.postlasso), scientific = F, digits=3)
-  line.L = rbind(rep(length(true.par),ncol(line)), medL, rep(lassoL, ncol(line)), rep(lassoL, ncol(line)))
+  line = format(round(rbind(caglad.fs,caglad.rmse, caglad.lasso, caglad.postlasso),digits=3), scientific = F)
+  
+  pos_change = (rbind(caglad.fs,caglad.rmse, caglad.lasso, caglad.postlasso)>10)
+  
+  line[pos_change] = "$>10$"
+  
+  line.L = round(rbind(rep(length(true.par),ncol(line)), medL, rep(lassoL, ncol(line)), rep(lassoL, ncol(line))),digits=2)
   
   line.L = paste(" (",line.L, ")",sep="")
   
@@ -65,9 +68,20 @@ print(xtable(table,caption = paste(toupper(mc.name),": relative RMSE under diffe
                         "command" = header),
       hline.after = c(-1,1, 1+seq(2,length.out = 4, by=2)))
 
+print(xtable(table[-(6:7),],caption = paste(toupper(mc.name),": relative RMSE under different selection procedures"),
+             label = paste(mc.name, "_table_select_summary",sep=""), align = alignment), type = "latex",
+      file = paste("results/",mc.name, "_table_select_summary.tex",sep=""), table.placement = "H",
+      caption.placement = "top", include.rownames = F, include.colnames = F,
+      sanitize.text.function = identity, scalebox = 0.6,
+      add.to.row = list("pos"=list(0),
+                        "command" = header),
+      hline.after = c(-1,1, 1+seq(2,length.out = 3, by=2)))
 
 if(!dir.exists(paste(paper_path,"/tables/",mc.name,sep="")))
   dir.create(paste(paper_path,"/tables/",mc.name,sep=""),recursive = T)
 
 file.copy(paste("results/",mc.name, "_table_select.tex",sep=""),
           paste(paper_path,"/tables/",mc.name,"/",mc.name, "_table_select.tex",sep=""), overwrite = T )
+
+file.copy(paste("results/",mc.name, "_table_select_summary.tex",sep=""),
+          paste(paper_path,"/tables/",mc.name,"/",mc.name, "_table_select_summary.tex",sep=""), overwrite = T )
