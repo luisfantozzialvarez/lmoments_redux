@@ -7,7 +7,7 @@ library(grf)
 
 lmoment.semiparametric <- function(train, holdout, y_pos, x_pos, w_pos, s_pos, par, L, orthogonal = F, grid_inv=nrow(holdout), lmoment.analytic = NULL, quantile.func=NULL, density.function = NULL,  
                            lmoment.est = "caglad", grid.length = nrow(holdout), two.step = T,
-                           vcov.est = "par",bounds=NULL,model = NULL,...){
+                           vcov.est = "par",bounds=NULL,model = NULL,first.step = NULL, ...){
   
   if(is.null(model))
   {
@@ -140,6 +140,7 @@ lmoment.semiparametric <- function(train, holdout, y_pos, x_pos, w_pos, s_pos, p
   objective <- function(theta){
     (lmoment.func(theta)-l.est -A_add)%*%t(lmoment.func(theta) -l.est-A_add)}
   
+  if(is.null(first.step))
   if(is.null(bounds))
     first.step = optim(par, objective, method = "BFGS", ...) else first.step = optim(par, objective, method = "L-BFGS-B", lower = bounds$lower, upper = bounds$upper, ...)
   

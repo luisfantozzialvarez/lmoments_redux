@@ -65,6 +65,7 @@ model <- lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, c(1,1,1
 model.twoside = model$model
 
 grid.test <- lapply(seq(0.01,0.99,0.01), function(u) {
+  
   print(u)
   
   model.lower = model$model
@@ -84,45 +85,82 @@ grid.test <- lapply(seq(0.01,0.99,0.01), function(u) {
   model.upper$res_oos = model.upper$res_oos[(ceil(u*length(model.upper$res_oos))+1):(length(model.upper$res_oos))]
   model.upper$corr = model.upper$corr[(ceil(u*length(model.upper$corr))+1):(length(model.upper$corr))]
   
+
   lower <- lapply(c(-1,1), function(x){
     lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos,  model$est$par, L, grid_inv = 1000, 
                            lmoment.analytic = lmoment.analytic.gev, quantile.func = quantile.function.gev,
-                           density.function = density.function.gev,  control = list( "maxit"=1000),
+                           density.function = density.function.gev,  
                            model = list('res_oos' = x*model.lower$res_oos,
-                                        'corr' = x*model.lower$corr)
+                                        'corr' = x*model.lower$corr), control = list( "maxit"=1000)
     )
   })
   
   upper <- lapply(c(-1,1), function(x){
     lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos,  model$est$par, L, grid_inv = 1000, 
                            lmoment.analytic = lmoment.analytic.gev, quantile.func = quantile.function.gev,
-                           density.function = density.function.gev,   control =list( "maxit"=1000),
+                           density.function = density.function.gev,   
                            model = list('res_oos' = x*model.upper$res_oos,
-                                        'corr' = x*model.upper$corr)
+                                        'corr' = x*model.upper$corr), control =list( "maxit"=1000)
     )
   })
   
   
-  par_guess =  c(lower[[which.min(sapply(lower, function(x) x$est$value))]]$est$par,u,upper[[which.min(sapply(upper, function(x) x$est$value))]]$est$par)
+  par_guess.1 =  c(lower[[which.min(sapply(lower, function(x) x$est$value))]]$est$par,u,upper[[which.min(sapply(upper, function(x) x$est$value))]]$est$par)
   
-  
-  model.tail <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess,
+  fs.1 <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess.1,
+                                         L, grid_inv = 1000, 
+                                         lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
+                                         density.function = density.function.gev.mix, bounds = list('lower'=c(-Inf,0,-Inf,0,-Inf,0,-Inf),'upper'=c(Inf,Inf,Inf,1,Inf,Inf,Inf)),
+                                         model = model.twoside, control = list( "maxit"=1000))},error = function(e){ print(e); return(NULL)})
+                                         
+  model.tail.1 <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess.1,
                                                  L, grid_inv = 1000, 
                                                  lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
-                                                 density.function = density.function.gev.mix, control = list( "maxit"=1000),
-                                                 model = model.twoside)}, error = function(e) NULL)
-  return(model.tail)
+                                                 density.function = density.function.gev.mix, 
+                                                 model = model.twoside, control = list( "maxit"=1000), first.step = fs.1$est)}, error = function(e) NULL)
+  
+  par_guess.2 =  c(upper[[which.min(sapply(upper, function(x) x$est$value))]]$est$par, 1-u, lower[[which.min(sapply(lower, function(x) x$est$value))]]$est$par)
+  
+  fs.2 <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess.2,
+                                           L, grid_inv = 1000, 
+                                           lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
+                                           density.function = density.function.gev.mix, bounds = list('lower'=c(-Inf,0,-Inf,0,-Inf,0,-Inf),'upper'=c(Inf,Inf,Inf,1,Inf,Inf,Inf)),
+                                           model = model.twoside, control = list( "maxit"=1000))},error = function(e){ print(e); return(NULL)})
+  
+  model.tail.2 <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess.2,
+                                                   L, grid_inv = 1000, 
+                                                   lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
+                                                   density.function = density.function.gev.mix, 
+                                                   model = model.twoside, control = list( "maxit"=1000), first.step = fs.2$est)}, error = function(e) NULL)
+  
+  
+   return(list('tail1' = model.tail.1, 'tail2' = model.tail.2, 'par.1' = par_guess.1, 'par.2' = par_guess.2))
 })
 
+save.image('intermmediate.RDS')
+position = sapply(grid.test, function(x) c(ifelse(is.null(x[[1]]), Inf, x[[1]]$est$value), ifelse(is.null(x[[2]]), Inf, x[[2]]$est$value)))
+line_min = which.min(apply(position,2 ,min))
 
-pos_min = which.min(sapply(grid.test, function(x) ifelse(is.null(x), Inf, x$est$value)))
+col_min = which.min(position[,line_min])
+
 
 #This will be the mixture model
-model.tail = grid.test[[pos_min]]
+model.tail = grid.test[[line_min]][[col_min]]
+
+prev.tail <-model.tail
+#We will now apply a continuously-updating procedure to improve the weighting matrix estimator
+list.tail <- list(model.tail)
+maxit=30
+for(j in 1:20)
+  if(!is.null(list.tail[[j]]))
+    list.tail[[j+1]] <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess.2,
+                                                 L, grid_inv = 1000, 
+                                                 lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
+                                                 density.function = density.function.gev.mix, 
+                                                 model = model.twoside, control = list( "maxit"=1000), first.step = list.tail[[j]]$est)}, error = function(e) NULL)
 
 
-
-
+model.tail= list.tail[[1+which.min(sapply(list.tail[2:(maxit+1)], function(x) ifelse(is.null(x), Inf, x$est$value)))]]
 
 
 #3. Generating results
@@ -135,6 +173,9 @@ dens_e <- function(par) density.function.gev.mix(grid_e,par)
 jacob_e = jacob.density.function.gev.mix(grid_e,model.tail$est$par)
 
 
+#Results
+#Setting seed again
+set.seed(123)
 
 #3.1 Raw data
 
@@ -203,7 +244,7 @@ dev.off()
 
 write.csv(cbind(model.tail$est$par, model.tail$est$par - qnorm(1-0.01/2)*sqrt(diag(vcov.gev)),model.tail$est$par +  qnorm(1-0.01/2)*sqrt(diag(vcov.gev))),'coefs.csv')
 
-
+save.image('final.RData')
 
 
 
