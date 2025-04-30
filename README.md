@@ -1,6 +1,6 @@
 # lmoments_redux
 
-This repository stores replication material for the paper "Inference in parametric models with many L-moments". It is structured as follows:
+This repository stores replication material for the paper "Inference on model parameters with many L-moments". It is structured as follows:
 
 * __methods__: contains generic functions to implement the main methods in the paper. These function are used by the replication material in the other folders.
 
