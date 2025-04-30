@@ -7,6 +7,13 @@ for(ss in SampleSize)
 
 
   modelo = readRDS(paste("select",mc.name, "_N",ss, ".RDS",sep=""))
+  
+  #Dropping those MC draws that produced nonconvergent estimatorsin the results of Section 4
+  if(file.exists(paste("keeper_",mc.name, "_N",ss, ".RDS",sep="")))
+  {
+    keeper = readRDS( paste("keeper_",mc.name, "_N",ss, ".RDS",sep=""))
+    modelo = modelo[keeper]
+  }
 
   ff = quantile.function(tau.seq, true.par)
   

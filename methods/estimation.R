@@ -4,7 +4,7 @@ library(pracma)
 
 lmoment.est <- function(y, par, L, orthogonal = F, lmoment.analytic = NULL, quantile.func=NULL,
                         weight.matrix = "par", density.function = NULL,  
-                        lmoment.est = "caglad", grid.length = length(y), par.first.step = NULL, vcov= F,...){
+                        lmoment.est = "caglad", grid.length = length(y), par.first.step = NULL, vcov= F, lmoment.deriv.analytic=NULL,...){
  
   if(orthogonal)
     coefs =  sapply(0:(L-1),function(x){ c((-1)^(x-0:x)*sapply(0:x, function(y){exp(log(choose(x,y))+log(choose(x+y,y)) - log(x+1)*(x+1))}),
@@ -85,6 +85,8 @@ lmoment.est <- function(y, par, L, orthogonal = F, lmoment.analytic = NULL, quan
       if(orthogonal)
         weight = t(coefs)%*%weight%*%coefs
       
+      orig = weight
+      
       weight = pinv(weight)
     }
     
@@ -94,8 +96,15 @@ lmoment.est <- function(y, par, L, orthogonal = F, lmoment.analytic = NULL, quan
   
   if(vcov)
   {
-    hss = - ad_jacobian(lmoment.func, second.step$par)
-    vcov = solve(t(hss)%*%weight%*%(hss))
-    return(list("fs"=first.step, "ss"=second.step, 'vcov'=vcov, 'N'= N))
+    if(is.null(lmoment.deriv.analytic))
+      hss = - ad_jacobian(lmoment.func, second.step$par) else hss = -lmoment.deriv.analytic(second.step$par, L)
+      
+      if(is.null(lmoment.deriv.analytic))
+        hfs = - ad_jacobian(lmoment.func, first.step$par) else hfs = -lmoment.deriv.analytic(first.step$par, L)
+
+    meat.ts = t(hss)%*%weight%*%(hss)
+    meat.fs =  t(hfs)%*%orig%*%(hfs)
+    bread.fs = t(hfs)%*%hfs
+    return(list("fs"=first.step, "ss"=second.step, 'N'= N,  'meat.ts' = meat.ts, 'meat.fs' = meat.fs, 'bread.fs' = bread.fs))
   } else return(list("fs"=first.step, "ss"=second.step))
 }

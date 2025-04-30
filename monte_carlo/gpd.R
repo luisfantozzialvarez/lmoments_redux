@@ -1,11 +1,9 @@
 rm(list=ls())
 
-setwd("~/Documents/GitHub/lmoments_redux/monte_carlo/")
+setwd("~/Documents/GitHub/lmoments_redux/monte_carlo")
 
 mc.name = "gpd"
 paper_path = "~/"
-
-julia_path = "/home/luisalvarez/julia-1.9.0/bin"
 
 quantile.function <- function(u, par){
   loc = 0
@@ -15,6 +13,48 @@ quantile.function <- function(u, par){
   if(shape==0)
     return(loc - scale*log(1-u)) else return(loc + scale*(1 - (1-u)^shape)/shape )
 }
+
+#Gradient of quantile function
+grad.quantile.function <- function(u,par){
+  loc = 0
+  scale = par[1]
+  shape  = par[2]
+  
+  if(shape==0)
+    vlh = cbind(1, -log(1 - u), (-(1/2))*scale*log(1 - u)^2)[,-1]
+  else vlh =cbind(1, (1 - (1 - u)^shape)/shape, -((scale*(1 - (1 - u)^shape))/shape^2) - (scale*(1 - u)^shape*log(1 - u))/shape)[,-1]
+  
+  if(length(u)==1)
+    t(vlh) else vlh
+  }
+
+hessian.quantile.function <- function(u,par){
+  
+  loc = 0
+  scale = par[1]
+  shape  = par[2]
+  
+  if(shape==0)
+    cbind(c(0, 0, 0), c(0, 0, (-(1/2))*log(1 - u)^2), c(0, (-(1/2))*log(1 - u)^2, (-(1/3))*scale*log(1 - u)^3))[,-1][-1,]
+  else cbind(c(0, 0, 0), c(0, 0, -((1 - (1 - u)^shape)/shape^2) - ((1 - u)^shape*log(1 - u))/shape), c(0, -((1 - (1 - u)^shape)/shape^2) - ((1 - u)^shape*log(1 - u))/shape, 
+                                                                                                       (2*scale*(1 - (1 - u)^shape))/shape^3 + (2*scale*(1 - u)^shape*log(1 - u))/shape^2 - (scale*(1 - u)^shape*log(1 - u)^2)/shape))[,-1][-1,]
+  
+  
+
+  
+    }
+
+#Gradient of the quantile gradient function Q'(u|\theta)
+grad.qdf <-function(u,par)
+{
+  loc = 0
+  scale = par[1]
+  shape  = par[2]
+  
+  if(shape==0)
+     cbind(0, 1/(1 - u), (scale*log(1 - u))/(1 - u))[,-1] else     cbind(0, (1 - u)^(-1 + shape), scale*(1 - u)^(-1 + shape)*log(1 - u))[,-1]
+}
+
 
 density.function <- function(y, par){
   loc = 0
@@ -36,14 +76,107 @@ lmoment.analytic <- function(par,L)
   l_vec = 0:(L-1)
   
   if(shape==0)
-    const = -(digamma(1) - digamma(2+l_vec)/gamma(2+l_vec)) else const = (1 - (gamma(1+shape)*gamma(2+l_vec))/gamma(2+shape+l_vec))/shape
+    const = -(digamma(1) - digamma(2+l_vec)) else const = (1 - (gamma(1+shape)*gamma(2+l_vec))/gamma(2+shape+l_vec))/shape
   
   return((1/(1+l_vec))*(loc + scale*const))
 }
 
+lmoment.deriv.analytic <- function(par,L)
+{
+  m = 0
+  r = par[1]
+  k  = par[2]
+  
+  l = 0:(L-1)
+  
+  if(k==0)
+    cbind(1/(1 + l), ((-digamma(1)) + digamma( 2 + l))/(1 + l), 
+          -((r*gamma(
+            1 + l)*(6*(-digamma(1))^2 + pi^2 + 
+                      12*(-digamma(1))*digamma( 2 + l) + 6*digamma( 2 + l)^2 - 
+                      6*psi(1, 2 + l)))/
+              (12*gamma(2 + l))))[,-1]
+    else 
+      cbind(1/(1 + l), (1 - (gamma(1 + k)*gamma(2 + l))/
+                          gamma(2 + k + l))/(k*(1 + l)), 
+            -((r*(1 - (gamma(1 + k)*gamma(2 + l))/gamma(2 + k + l)))/(k^2*(1 + 
+                                                                             l))) + 
+              (r*(-((gamma(1 + k)*gamma(2 + l)*digamma( 1 + k))/
+                      gamma(2 + k + l)) + (gamma(1 + k)*gamma(2 + l)*
+                                             digamma( 2 + k + l))/
+                    gamma(2 + k + l)))/(k*(1 + l)))[,-1]
+  
+}
+
+lmoment.hessian.analytic <- function(par,l)
+{
+  m = 0
+  r = par[1]
+  k  = par[2]
+  
+  l = l-1
+  
+  if(k==0)
+    mat = cbind(c(0, 0, 0), c(0, 
+                    0, -((gamma(
+                      1 + l)*(6*(-digamma(1))^2 + pi^2 + 
+                                12*(-digamma(1))*digamma( 2 + l) + 6*digamma( 2 + l)^2 - 
+                                6*psi(1, 2 + l)))/(12*gamma(2 + l)))), 
+      c(0, -((gamma(
+        1 + l)*(6*(-digamma(1))^2 + pi^2 + 
+                  12*(-digamma(1))*digamma( 2 + l) + 
+                  6*digamma( 2 + l)^2 - 6*psi(1, 2 + l)))/
+          (12*gamma(2 + l))), (1/6)*
+          r*((1/gamma(2 + l))*(gamma(
+            1 + l)*(2*(-digamma(1))^3 + (-digamma(1))*pi^2 + 
+                      6*(-digamma(1))*digamma( 2 + l)^2 + 
+                      
+                      digamma( 
+                        2 + l)*(6*(-digamma(1))^2 + pi^2 - 12*psi(1, 2 + l)) - 
+                      6*(-digamma(1))*psi(1, 2 + l) - 2*psi(2, 1))) + 
+              (2*(digamma( 2 + l)^3 + 
+                    3*digamma( 2 + l)*psi(1, 2 + l) + 
+                    psi(2, 2 + l)))/(1 + l))))
+    else mat = cbind(c(0, 0, 0), c(0, 
+                      0, -((1 - (gamma(1 + k)*gamma(2 + l))/
+                              gamma(2 + k + l))/(k^2*(1 + l))) + 
+                        (-((gamma(1 + k)*gamma(2 + l)*digamma( 1 + k))/
+                             gamma(2 + k + l)) + (gamma(1 + k)*gamma(2 + l)*
+                                                    digamma( 2 + k + l))/
+                           
+                           gamma(2 + k + l))/(k*(1 + 
+                                                   l))), c(0, -((1 - (gamma(1 + k)*gamma(2 + l))/
+                                                                   gamma(2 + k + l))/(k^2*(1 + l))) + 
+                                                             (-((gamma(1 + k)*gamma(2 + l)*digamma( 1 + k))/
+                                                                  gamma(2 + k + l)) + (gamma(1 + k)*gamma(2 + l)*
+                                                                                         digamma( 2 + k + l))/
+                                                                gamma(2 + k + l))/(k*(1 + l)), (2*
+                                                                                                  r*(1 - (gamma(1 + k)*gamma(2 + l))/gamma(2 + k + l)))/(k^3*(1 + 
+                                                                                                                                                                l)) - 
+                                                             (2*
+                                                                r*(-((gamma(1 + k)*gamma(2 + l)*digamma( 1 + k))/
+                                                                       gamma(2 + k + l)) + (gamma(1 + k)*gamma(2 + l)*
+                                                                                              digamma( 2 + k + l))/
+                                                                     gamma(2 + k + l)))/(k^2*(1 + 
+                                                                                                l)) + (1/(k*(1 + 
+                                                                                                               l)))*(r*(-((gamma(1 + k)*gamma(2 + l)*
+                                                                                                                             digamma( 1 + k)^2)/gamma(2 + k + l)) + 
+                                                                                                                          (2*gamma(1 + k)*gamma(2 + l)*digamma( 1 + k)*
+                                                                                                                             digamma( 2 + k + l))/gamma(2 + k + l) - 
+                                                                                                                          (gamma(1 + k)*gamma(2 + l)*digamma( 2 + k + l)^2)/
+                                                                                                                          gamma(2 + k + l) - (gamma(1 + k)*gamma(2 + l)*
+                                                                                                                                                psi(1, 1 + k))/
+                                                                                                                          
+                                                                                                                          gamma(2 + k + l) + (gamma(1 + k)*gamma(2 + l)*
+                                                                                                                                                psi(1, 2 + k + l))/gamma(2 + k + l)))))
+
+  return(mat[-1,][,-1])
+  }
+
+
 true.par = c(1,-0.2)
 
-Nreps = 2000
+Nreps = 5000
 SampleSize = c(50,100,500)
 
 max.L=100
@@ -54,6 +187,11 @@ source("aux/make_data.R")
 source("aux/simulation.R")
 source("aux/gen_results.R")
 
+source("aux/gen_results_linear.R")
+
 source("aux/simulation_selection.R")
 source("aux/gen_results_selection.R")
+
+source("aux/gen_correction.R")
+source("aux/gen_results_coverage.R")
 

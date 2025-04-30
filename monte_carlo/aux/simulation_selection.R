@@ -17,6 +17,9 @@ for(N in SampleSize)
   set.seed(123)
   for(j in 1:Nreps)
   {
+ 
+    
+    
     print(j)
     yData = yMat[,j]
     
@@ -24,11 +27,15 @@ for(N in SampleSize)
     
     mat_select_caglad = tryCatch({lmoment.select(yData, true.par, max(Ltest), orthogonal = F, uvalues = tau.seq, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,  
                                lmoment.est = "caglad", grid.length = 2000, Nsim = 1000,
+                               lmoment.deriv.analytic =lmoment.deriv.analytic,
+                               lmoment.hessian.analytic = lmoment.hessian.analytic, grad.qdf.analytic = grad.qdf, grad.qf.analytic = grad.quantile.function, hessian.qf.analytic=hessian.quantile.function, 
                                control = list( "maxit"=500),mc.cores= detectCores() )},
                                error = function(e){
-                                 print(error)
+                                 print(e)
                                  lmoment.select(yData, mle$par, max(Ltest), orthogonal = F, uvalues = tau.seq, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,  
                                                 lmoment.est = "caglad", grid.length = 2000, Nsim = 1000,
+                                                lmoment.deriv.analytic =lmoment.deriv.analytic,
+                                                lmoment.hessian.analytic = lmoment.hessian.analytic, grad.qdf.analytic = grad.qdf, grad.qf.analytic = grad.quantile.function, hessian.qf.analytic=hessian.quantile.function, 
                                                 control = list( "maxit"=500),mc.cores= detectCores() )
                                  
                                })
@@ -36,40 +43,46 @@ for(N in SampleSize)
 
     print(mat_select_caglad$Lvals)
     
-    # mat_select_unbiased = lmoment.select(yData, true.par, max(Ltest), orthogonal = F, uvalues = tau.seq, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,
-    #                             lmoment.est = "unbiased", grid.length = 2000, Nsim = 1000,
-    #                             control = list( "maxit"=500),mc.cores=2)
-    # 
-    # print(mat_select_unbiased$Lvals)
-    
+ 
     caglad_ss = mclapply(mat_select_caglad$Lvals, function(L){tryCatch({lmoment.est(yData, true.par, L, lmoment.analytic = lmoment.analytic, quantile.func = quantile.function,
                                                                               density = density.function,
-                                                                              lmoment.est = "caglad", grid.length = 2000, par.first.step = mat_select_caglad$first.step$par, control = list( "maxit"=500))},
+                                                                              lmoment.est = "caglad", grid.length = 2000, par.first.step = mat_select_caglad$first.step$par,
+                                                                              control = list( "maxit"=500))},
                                                                         error = function(e) {
+                                                                          print(e)
                                                                           lmoment.est(yData, mle$par, L, lmoment.analytic = lmoment.analytic, quantile.func = quantile.function,
                                                                                       density = density.function,
-                                                                                      lmoment.est = "caglad", grid.length = 2000, par.first.step = mat_select_caglad$first.step$par, control = list( "maxit"=500))
+                                                                                      lmoment.est = "caglad", grid.length = 2000, par.first.step = mat_select_caglad$first.step$par,        
+                                                                                      control = list( "maxit"=500))
                                                                         })},
                            mc.cores = 1)
     
-    # unbiased_ss = mclapply(mat_select_unbiased$Lvals, function(L){lmoment.est(yData, true.par, L, lmoment.analytic = lmoment.analytic, quantile.func = quantile.function,
-    #                                                       density = density.function,
-    #                                                       lmoment.est = "unbiased", grid.length = 2000, par.first.step = mat_select_unbiased$first.step$par, control = list( "maxit"=500))},
-    #                        mc.cores = 1)
-   
+    
     
     lasso.select = tryCatch({tryCatch({lmoment.lasso(yData, true.par, 2*max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,
-                              lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, control = list("maxit" = 500))},
+                              lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, 
+                              lmoment.deriv.analytic =lmoment.deriv.analytic,
+                              lmoment.hessian.analytic = lmoment.hessian.analytic, grad.qdf.analytic = grad.qdf, 
+                              control = list("maxit" = 500))},
                             error = function(e){
                               lmoment.lasso(yData, mle$par, 2*max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,
-                                            lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, control = list("maxit" = 500))
+                                            lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, 
+                                            lmoment.deriv.analytic =lmoment.deriv.analytic,
+                                            lmoment.hessian.analytic = lmoment.hessian.analytic, grad.qdf.analytic = grad.qdf, 
+                                            control = list("maxit" = 500))
                             })},
                             error=function(e){
                               tryCatch({lmoment.lasso(yData, true.par, max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,
-                                                      lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, control = list("maxit" = 500))},
+                                                      lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, 
+                                                      lmoment.deriv.analytic =lmoment.deriv.analytic,
+                                                      lmoment.hessian.analytic = lmoment.hessian.analytic, grad.qdf.analytic = grad.qdf, 
+                                                      control = list("maxit" = 500))},
                                        error = function(e){
                                          lmoment.lasso(yData, mle$par, max(Ltest), orthogonal = F, lmoment.analytic = lmoment.analytic, quantile.func=quantile.function, density.function = density.function,
-                                                       lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, control = list("maxit" = 500))
+                                                       lmoment.est = "caglad",   weight.matrix = "par", grid.length = 2000, max.iter = 10, tol.iter = 0.01, step.iter = 0.01, 
+                                                       lmoment.deriv.analytic =lmoment.deriv.analytic,
+                                                       lmoment.hessian.analytic = lmoment.hessian.analytic, grad.qdf.analytic = grad.qdf, 
+                                                       control = list("maxit" = 500))
                                        })
                             })
 

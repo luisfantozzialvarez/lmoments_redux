@@ -2,15 +2,17 @@ library(np)
 library(pracma)
 library(parallel)
 
-library(autodiffr)
-ad_setup(JULIA_HOME=julia_path)
-library(JuliaCall)
-julia_library("SpecialFunctions")
+#Load these lines if you will use automatic differentiation instead of providing closed form expressions for the derivatives
+#library(autodiffr)
+#ad_setup(JULIA_HOME=julia_path)
+#library(JuliaCall)
+#julia_library("SpecialFunctions")
 
 library(quadprog)
 
 lmoment.select <- function(y, par, Lmax, orthogonal = F, uvalues = NULL, lmoment.analytic = NULL, quantile.func=NULL, density.function = NULL,  
-                        lmoment.est = "caglad", grid.length = length(y), Nsim = 500, mc.cores = detectCores(),...){
+                        lmoment.est = "caglad", grid.length = length(y), Nsim = 500, mc.cores = detectCores(),lmoment.deriv.analytic =NULL,
+                        lmoment.hessian.analytic = NULL, grad.qdf.analytic = NULL, grad.qf.analytic = NULL, hessian.qf.analytic=NULL, ...){
   
   if(orthogonal)
     coefs =  sapply(0:(Lmax-1),function(x){ c((-1)^(x-0:x)*sapply(0:x, function(y){exp(log(choose(x,y))+log(choose(x+y,y)) - log(x+1)*(x+1))}),
@@ -75,14 +77,14 @@ lmoment.select <- function(y, par, Lmax, orthogonal = F, uvalues = NULL, lmoment
   
   } ))
   
-  
-  h1 = - ad_jacobian(lmoment.func, first.step$par)
+  if(is.null(lmoment.deriv.analytic))
+    h1 = - ad_jacobian(lmoment.func, first.step$par) else  h1 = - lmoment.deriv.analytic(first.step$par,Lmax)
   
   h2 = lapply(1:Lmax, function(j)
     {
     ff <- function(par) lmoment.func(par)[j]
-    
-    - ad_hessian(ff, first.step$par)
+    if(is.null(lmoment.hessian.analytic))
+    - ad_hessian(ff, first.step$par) else - lmoment.hessian.analytic(first.step$par,j)
   })
   
   #We start with the first step  simulated representation
@@ -107,7 +109,8 @@ lmoment.select <- function(y, par, Lmax, orthogonal = F, uvalues = NULL, lmoment
   
   
   #Calculating derivatives of optimal weighting matrix
-  jac_weight = ad_jacobian(function(par) 1/density.function(quantile.func(midder,par), par), first.step$par) 
+  if(is.null(grad.qdf.analytic))
+    jac_weight = ad_jacobian(function(par) 1/density.function(quantile.func(midder,par), par), first.step$par) else jac_weight = grad.qdf.analytic(midder, first.step$par)
   
   mat_fs_deriv = lapply(1:ncol(jac_weight), function(j){
     jjj = t(power_mat)%*%(mat_middle*(vwd%*%t(jac_weight[,j]) + jac_weight[,j]%*%t(vwd)))%*%power_mat/grid.length.weight^2 
@@ -174,18 +177,22 @@ lmoment.select <- function(y, par, Lmax, orthogonal = F, uvalues = NULL, lmoment
   if(is.null(uvalues))
     return(list("VT" = Valores_Theta, "first.step" = first.step)) else {
       
-      Lvals = Lgrid[sapply(uvalues, function(u){
+      final_list = lapply(uvalues, function(u){
         qff = function(par) quantile.func(u, par)
         
-        qd = ad_grad(qff, first.step$par)
-        qh = ad_hessian(qff, first.step$par)
-        
-        valores = sapply(Valores_Theta, function(Theta) qd%*%Theta + diag(t(Theta)%*%qh%*%Theta))
-        
-        which.min(colMeans(valores^2))
-      })]
+        if(is.null(grad.qf.analytic))
+          qd = ad_grad(qff, first.step$par) else qd= grad.qf.analytic(u, first.step$par)
+          
+          if(is.null(hessian.qf.analytic))
+            qh = ad_hessian(qff, first.step$par) else qh = hessian.qf.analytic(u, first.step$par)
+            
+            valores = sapply(Valores_Theta, function(Theta) qd%*%Theta + diag(t(Theta)%*%qh%*%Theta))
+            
+            list('gridLpos' =which.min(colMeans(valores^2)), 'mean'=colMeans(valores), 'variance'= colMeans(valores^2)-colMeans(valores))
+      })
       
-      return(list("Lvals" = Lvals, "first.step" = first.step))
+      Lvals = Lgrid[sapply(final_list, function(poss) poss[[1]])]
+      return(list("Lvals" = Lvals, "first.step" = first.step, 'mean_var' = final_list))
     }
   
   
@@ -194,7 +201,9 @@ lmoment.select <- function(y, par, Lmax, orthogonal = F, uvalues = NULL, lmoment
 
 
 lmoment.lasso <- function(y, par, Lmax, orthogonal = F, lmoment.analytic = NULL, quantile.func=NULL, density.function = NULL,  
-                           lmoment.est = "caglad",   weight.matrix = "par", grid.length = length(y), max.iter = 50, tol.iter = 0.01, step.iter = 0.01, ...){
+                           lmoment.est = "caglad",   weight.matrix = "par", grid.length = length(y), max.iter = 50, tol.iter = 0.01, step.iter = 0.01,
+                          lmoment.deriv.analytic =NULL,
+                          lmoment.hessian.analytic = NULL, grad.qdf.analytic = NULL, ...){
   
   if(orthogonal)
     coefs =  sapply(0:(Lmax-1),function(x){ c((-1)^(x-0:x)*sapply(0:x, function(y){exp(log(choose(x,y))+log(choose(x+y,y)) - log(x+1)*(x+1))}),
@@ -237,17 +246,19 @@ lmoment.lasso <- function(y, par, Lmax, orthogonal = F, lmoment.analytic = NULL,
   first.step = optim(par, objective, method = "BFGS", ...) 
   
   l.theta.fs = lmoment.func(first.step$par)
+
   
-  
-  h1 = - ad_jacobian(lmoment.func, first.step$par)
+  if(is.null(lmoment.deriv.analytic))
+    h1 = - ad_jacobian(lmoment.func, first.step$par) else  h1 = - lmoment.deriv.analytic(first.step$par,Lmax)
   
   h2 = lapply(1:Lmax, function(j)
   {
     ff <- function(par) lmoment.func(par)[j]
-    
-    - ad_hessian(ff, first.step$par)
+    if(is.null(lmoment.hessian.analytic))
+      - ad_hessian(ff, first.step$par) else - lmoment.hessian.analytic(first.step$par,j)
   })
-
+  
+  
   #Now calculate optimal weights using the parametric estimator
   
   if(weight.matrix == "semi")
@@ -289,10 +300,11 @@ lmoment.lasso <- function(y, par, Lmax, orthogonal = F, lmoment.analytic = NULL,
   A_prog = rbind(cbind(weight, - weight),cbind(-weight, weight))
   
   A_prog = nearest_spd(A_prog)
-
   
   #Calculating derivatives of optimal weighting matrix
-  jac_weight = ad_jacobian(function(par) 1/density.function(quantile.func(midder,par), par), first.step$par) 
+  if(is.null(grad.qdf.analytic))
+    jac_weight = ad_jacobian(function(par) 1/density.function(quantile.func(midder,par), par), first.step$par) else jac_weight = grad.qdf.analytic(midder, first.step$par)
+  
   
   mat_fs_deriv = lapply(1:ncol(jac_weight), function(j){
     jjj = t(power_mat)%*%(mat_middle*(vwd%*%t(jac_weight[,j]) + jac_weight[,j]%*%t(vwd)))%*%power_mat/grid.length.weight^2 
@@ -351,7 +363,6 @@ lmoment.lasso <- function(y, par, Lmax, orthogonal = F, lmoment.analytic = NULL,
                     error = function(e)
                     {
                       Dmat = A_prog + 1e-10*diag(nrow(A_prog))
-                      #print(Dmat)
                       solve.QP(Dmat = Dmat , dvec = +bb_prog - rep(penalty_base, 2), Amat = diag(nrow(A_prog)))
                     })
 
@@ -361,50 +372,7 @@ lmoment.lasso <- function(y, par, Lmax, orthogonal = F, lmoment.analytic = NULL,
     lambda_new = lambda_new[1:nrow(weight)] - lambda_new[(nrow(weight)+1):(2*nrow(weight))]
 
     lambda = lambda_new
-
-    # itt = 0
-    # 
-    # repeat{
-    # 
-    #   qpp = solve.QP(Dmat = A_prog, dvec = +bb_prog - rep(penalty_base, 2), Amat = diag(nrow(A_prog)))
-    # 
-    #   lambda_new = qpp$solution
-    # 
-    #   lambda_new[qpp$iact] = 0
-    #   lambda_new = lambda_new[1:nrow(weight)] - lambda_new[(nrow(weight)+1):(2*nrow(weight))]
-    # 
-    # 
-    # 
-    #   if(itt==0)
-    #   {
-    #     lambda_old = 0
-    #     lambda = lambda_new
-    #   } else {
-    #     lambda_old = lambda
-    #     lambda = (1-step.iter)*lambda + step.iter*lambda_new
-    #   }
-    # 
-    #   if(itt==0)
-    #     err = tol.iter*2 else err =  mean(abs(lambda-lambda_old))
-    # 
-    #   print(itt)
-    #   print(err)
-    #   itt = itt+1
-    # 
-    #   if(err<tol.iter|itt> max.iter)
-    #     break
-    # 
-    # 
-    #   upAlt = sapply(1:Lmax, function(j){
-    # 
-    #     vvK = sapply(mat_fs_deriv, function(jk) jk[j,])
-    # 
-    #     sqrt(t(lambda)%*%vvK%*%fs.rep%*%t(vvK)%*%lambda)
-    #   })
-    # 
-    #   penalty_base = t0*(upAlt + upB)
-    # }
-
+    
     return(lambda)
   })
   

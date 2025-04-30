@@ -1,22 +1,27 @@
 rm(list=ls())
 
-setwd("~/Documents/GitHub/lmoments_redux/application/")
+setwd("~/Documents/GitHub/lmoments_redux/application")
 
-julia_path = '/Applications/Julia-1.9.app/Contents/Resources/julia/bin'
+julia_path = "/Users/luisalvarez/julia-1.9.0/bin/"
+
+#Loading autodiffr for automatic differentiation
+library(autodiffr)
+ad_setup(JULIA_HOME=julia_path)
+library(JuliaCall)
+julia_library("SpecialFunctions")
 
 library(plm)
 library(grf)
 
+
+#Loading data
 dados = read.csv("dataset_ridesharing.csv")
-
-
 
 semanas = unique(dados$week)
 
-
-early = dados[dados$week!="2018-09-24",]
-late = dados[dados$week=="2018-09-24",]
-
+early = dados[!(dados$week%in%c("2018-09-17","2018-09-24")),]
+late = dados[dados$week=="2018-09-17",]
+forecast = dados[dados$week=="2018-09-24",]
 
 set.seed(123)
 
@@ -34,12 +39,15 @@ fs = lmoment.est(late$expenses, c(1,1), 2, lmoment.analytic = lmoment.analytic.g
 tau.seq = seq(0.1,0.9, by = c(0.1))
 
 tabua = lmoment.select(late$expenses, fs$fs$par, 150, orthogonal = F, uvalues = tau.seq, lmoment.analytic = lmoment.analytic.gpd, quantile.func=quantile.function.gpd, density.function = density.function.gpd,
+                       lmoment.deriv.analytic =lmoment.deriv.analytic.gpd,
+                       lmoment.hessian.analytic = lmoment.hessian.analytic.gpd, grad.qdf.analytic = grad.qdf.gpd, grad.qf.analytic = grad.quantile.function.gpd, hessian.qf.analytic=hessian.quantile.function.gpd, 
                        lmoment.est = "caglad", grid.length = 2000, Nsim = 1000,
                        control = list( "maxit"=500),mc.cores= detectCores() )
 
 L= median(tabua$Lvals)
 
 ts = lmoment.est(late$expenses, fs$fs$par,L, lmoment.analytic = lmoment.analytic.gpd, quantile.func = quantile.function.gpd,
+                 lmoment.deriv.analytic =lmoment.deriv.analytic.gpd,
                  density = density.function.gpd, grid.length = 2000, weight.matrix = "par", control = list( "maxit"=500),
                  vcov=T)
 
@@ -56,9 +64,7 @@ s_pos = which(colnames(dados)=="lex2")
 #First step, just to estimate residuals
 model <- lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, c(1,1,1), L, grid_inv = 1000, 
                                 lmoment.analytic = lmoment.analytic.gev, quantile.func = quantile.function.gev,
-                                density.function = density.function.gev,   control = list( "maxit"=500))
-
-
+                                  control = list( "maxit"=500))
 
 
 #Now, finding mixture. We run estimator from different starting mixing points
@@ -70,37 +76,34 @@ grid.test <- lapply(seq(0.01,0.99,0.01), function(u) {
   
   model.lower = model$model
   model.lower$res_oos = model.lower$res_oos[order(model.lower$res_oos)]
-  model.lower$corr = model.lower$corr[order(model.lower$corr)]
+  model.lower$mat = array(0, dim(model.lower$mat))
   
   
   model.lower$res_oos = model.lower$res_oos[1:ceil(u*length(model.lower$res_oos))]
-  model.lower$corr = model.lower$corr[1:ceil(u*length(model.lower$corr))]
-  
   
   model.upper = model$model
   model.upper$res_oos = model.upper$res_oos[order(model.upper$res_oos)]
-  model.upper$corr = model.upper$corr[order(model.upper$corr)]
+  model.upper$mar =  array(0, dim(model.upper$mat))
   
   
   model.upper$res_oos = model.upper$res_oos[(ceil(u*length(model.upper$res_oos))+1):(length(model.upper$res_oos))]
-  model.upper$corr = model.upper$corr[(ceil(u*length(model.upper$corr))+1):(length(model.upper$corr))]
-  
+
 
   lower <- lapply(c(-1,1), function(x){
     lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos,  model$est$par, L, grid_inv = 1000, 
                            lmoment.analytic = lmoment.analytic.gev, quantile.func = quantile.function.gev,
-                           density.function = density.function.gev,  
                            model = list('res_oos' = x*model.lower$res_oos,
-                                        'corr' = x*model.lower$corr), control = list( "maxit"=1000)
+                                        'mat' =model.lower$mat,
+                                        'v_adj' = model.lower$v_adj), control = list( "maxit"=1000)
     )
   })
   
   upper <- lapply(c(-1,1), function(x){
     lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos,  model$est$par, L, grid_inv = 1000, 
                            lmoment.analytic = lmoment.analytic.gev, quantile.func = quantile.function.gev,
-                           density.function = density.function.gev,   
                            model = list('res_oos' = x*model.upper$res_oos,
-                                        'corr' = x*model.upper$corr), control =list( "maxit"=1000)
+                                        'mat' =model.upper$mat,
+                                        'v_adj' = model.upper$v_adj), control =list( "maxit"=1000)
     )
   })
   
@@ -110,13 +113,12 @@ grid.test <- lapply(seq(0.01,0.99,0.01), function(u) {
   fs.1 <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess.1,
                                          L, grid_inv = 1000, 
                                          lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
-                                         density.function = density.function.gev.mix, bounds = list('lower'=c(-Inf,0,-Inf,0,-Inf,0,-Inf),'upper'=c(Inf,Inf,Inf,1,Inf,Inf,Inf)),
+                                          bounds = list('lower'=c(-Inf,0,-Inf,0,-Inf,0,-Inf),'upper'=c(Inf,Inf,Inf,1,Inf,Inf,Inf)),
                                          model = model.twoside, control = list( "maxit"=1000))},error = function(e){ print(e); return(NULL)})
                                          
   model.tail.1 <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess.1,
                                                  L, grid_inv = 1000, 
                                                  lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
-                                                 density.function = density.function.gev.mix, 
                                                  model = model.twoside, control = list( "maxit"=1000), first.step = fs.1$est)}, error = function(e) NULL)
   
   par_guess.2 =  c(upper[[which.min(sapply(upper, function(x) x$est$value))]]$est$par, 1-u, lower[[which.min(sapply(lower, function(x) x$est$value))]]$est$par)
@@ -124,23 +126,22 @@ grid.test <- lapply(seq(0.01,0.99,0.01), function(u) {
   fs.2 <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess.2,
                                            L, grid_inv = 1000, 
                                            lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
-                                           density.function = density.function.gev.mix, bounds = list('lower'=c(-Inf,0,-Inf,0,-Inf,0,-Inf),'upper'=c(Inf,Inf,Inf,1,Inf,Inf,Inf)),
+                                            bounds = list('lower'=c(-Inf,0,-Inf,0,-Inf,0,-Inf),'upper'=c(Inf,Inf,Inf,1,Inf,Inf,Inf)),
                                            model = model.twoside, control = list( "maxit"=1000))},error = function(e){ print(e); return(NULL)})
   
   model.tail.2 <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess.2,
                                                    L, grid_inv = 1000, 
                                                    lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
-                                                   density.function = density.function.gev.mix, 
                                                    model = model.twoside, control = list( "maxit"=1000), first.step = fs.2$est)}, error = function(e) NULL)
   
   
    return(list('tail1' = model.tail.1, 'tail2' = model.tail.2, 'par.1' = par_guess.1, 'par.2' = par_guess.2))
 })
 
-save.image('intermmediate.RDS')
+#Finding best starting point for estimation
 position = sapply(grid.test, function(x) c(ifelse(is.null(x[[1]]), Inf, x[[1]]$est$value), ifelse(is.null(x[[2]]), Inf, x[[2]]$est$value)))
-line_min = which.min(apply(position,2 ,min))
 
+line_min = which.min(apply(position,2 ,min))
 col_min = which.min(position[,line_min])
 
 
@@ -148,19 +149,12 @@ col_min = which.min(position[,line_min])
 model.tail = grid.test[[line_min]][[col_min]]
 
 prev.tail <-model.tail
-#We will now apply a continuously-updating procedure to improve the weighting matrix estimator
-list.tail <- list(model.tail)
-maxit=30
-for(j in 1:20)
-  if(!is.null(list.tail[[j]]))
-    list.tail[[j+1]] <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, par_guess.2,
-                                                 L, grid_inv = 1000, 
-                                                 lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
-                                                 density.function = density.function.gev.mix, 
-                                                 model = model.twoside, control = list( "maxit"=1000), first.step = list.tail[[j]]$est)}, error = function(e) NULL)
 
-
-model.tail= list.tail[[1+which.min(sapply(list.tail[2:(maxit+1)], function(x) ifelse(is.null(x), Inf, x$est$value)))]]
+model.tail <- tryCatch({lmoment.semiparametric(early, late, y_pos, x_pos, w_pos, s_pos, NULL,
+                                 L, grid_inv = 1000,
+                                 lmoment.analytic = lmoment.analytic.gev.mix, quantile.func =  quantile.function.gev.mix,
+                                 model = model.twoside, control = list( "maxit"=1000), first.step = prev.tail$est,
+                                 lmoment.deriv.analytic = lmoment.deriv.gev.mix)}, error = function(e) NULL)
 
 
 #3. Generating results
@@ -185,7 +179,7 @@ pvalue = 1 - pchisq(ts$ss$value*nrow(late), L-length(ts$ss$par))
 
 Nsims = 5000
 
-vcov.gpd = ts$vcov/ts$N
+vcov.gpd = solve(ts$meat.ts)/ts$N
 
 sim_crit = jacob_gpd%*%t(chol(vcov.gpd))%*%matrix(rnorm(length(ts$ss$par)*Nsims),length(ts$ss$par))
 
@@ -236,15 +230,21 @@ hist(model$model$res_oos,freq=F,breaks = seq(min(10*ceiling(model$model$res_oos)
      main =  expression(Delta~hat(e)[it]))
 
 polygon(c(grid_e, rev(grid_e)), c(lower_upper[,1], rev(lower_upper[,2])), col = "#0000FF50",border=NA)
-
 curve(curve.f,min(model$model$res_oos),max(model$model$res_oos),col = 'blue', add=T)
 dev.off()
 
-#99 Percent CI
+#95 Percent CI for model parameters
+write.csv(cbind(model.tail$est$par, model.tail$est$par - qnorm(1-0.05/2)*sqrt(diag(vcov.gev)),model.tail$est$par +  qnorm(1-0.05/2)*sqrt(diag(vcov.gev))),'coefs.csv')
 
-write.csv(cbind(model.tail$est$par, model.tail$est$par - qnorm(1-0.01/2)*sqrt(diag(vcov.gev)),model.tail$est$par +  qnorm(1-0.01/2)*sqrt(diag(vcov.gev))),'coefs.csv')
+#Prediction intervals
+set.seed(123)
+data = rbind(early)
+slope = instrumental_forest(as.matrix( data[,x_pos]), as.matrix(data[,y_pos]), as.matrix(data[,w_pos]), as.matrix(data[,s_pos]))
+intercept = regression_forest(as.matrix(data[,x_pos]), as.numeric(data[,y_pos]) - predict(slope)[,1]*as.numeric(data[,w_pos]))
 
-save.image('final.RData')
+res =as.numeric(late[,y_pos]) - predict(slope,newdata = as.matrix(late[,x_pos]))[,1]*as.numeric(late[,w_pos]) - predict(intercept,newdata = as.matrix(late[,x_pos]))[,1]
 
-
+point_forecasts = predict(intercept, newdata = as.matrix(forecast[,x_pos]))[,1]+ predict(slope, newdata = as.matrix(forecast[,x_pos]))[,1]*as.vector(forecast[,w_pos])
+lower_pred_uc = forecast[,y_pos] - (point_forecasts + quantile.function.gev.mix(0.95, model.tail$est$par))
+mean((lower_pred_uc<=0))
 

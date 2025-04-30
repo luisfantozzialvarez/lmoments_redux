@@ -7,3 +7,5 @@ This repository stores replication material for the paper "Inference in parametr
 * **monte_carlo**: materials for replicating the Monte Carlo exercises in the paper. The scripts _gev.R_ and _gpd.R_ replicate, respectively, exercises using a Generalised Exponential and Generalised Pareto distribution. The subfolder __aux__ contains auxiliary scripts to these exercises that are used by the _gev.R_ and _gpd.R_ routines.
 
 * __application__: materials for replicating the empirical application in the paper. The chunk _run_application.R_ replicates the results in the paper. The file _dataset_ridesharing.csv_ stores the data used in the application. The file _specifications_application.R_ is an auxiliary script that is called by _run_application.R_ and contains functions representing the specifications adopted in the application.
+
+* __notebook__: contains a Mathematica notebook that provides the analytical derivatives and Hessians required by the selection methods in the GEV and GPD families (and reproduced in Supplemental Appendix M).
